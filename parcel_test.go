@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"math/rand"
 	"testing"
@@ -39,17 +40,18 @@ func TestAddGetDelete(t *testing.T) {
 	defer db.Close()
 	store := NewParcelStore(db)
 	parcel := getTestParcel()
+	ctx := context.Background()
 
 	// add
 	// добавьте новую посылку в БД, убедитесь в отсутствии ошибки и наличии идентификатора
-	id, err := store.Add(parcel)
-	require.Equal(t, err, nil)
+	id, err := store.Add(ctx, parcel)
+	assert.Nil(t, err)
 	require.NotEqual(t, id, 0)
 	// get
 	// получите только что добавленную посылку, убедитесь в отсутствии ошибки
 	// проверьте, что значения всех полей в полученном объекте совпадают со значениями полей в переменной parcel
-	selectedParcel, err := store.Get(id)
-	assert.Equal(t, err, nil)
+	selectedParcel, err := store.Get(ctx, id)
+	assert.Nil(t, err)
 	assert.Equal(t, selectedParcel.Number, id)
 	assert.Equal(t, selectedParcel.Client, parcel.Client)
 	assert.Equal(t, selectedParcel.Status, parcel.Status)
@@ -59,11 +61,11 @@ func TestAddGetDelete(t *testing.T) {
 	// delete
 	// удалите добавленную посылку, убедитесь в отсутствии ошибки
 	// проверьте, что посылку больше нельзя получить из БД
-	err = store.Delete(selectedParcel.Number)
-	assert.Equal(t, err, nil)
+	err = store.Delete(ctx, selectedParcel.Number)
+	assert.Nil(t, err)
 
-	parcelAfterDelete, err := store.Get(id)
-	assert.NotEqual(t, err, nil)
+	parcelAfterDelete, err := store.Get(ctx, id)
+	assert.NotNil(t, err)
 	assert.Empty(t, parcelAfterDelete.Number)
 	assert.Empty(t, parcelAfterDelete.Client)
 	assert.Empty(t, parcelAfterDelete.Status)
@@ -82,21 +84,22 @@ func TestSetAddress(t *testing.T) {
 	defer db.Close()
 	store := NewParcelStore(db)
 	parcel := getTestParcel()
+	ctx := context.Background()
 	// add
 	// добавьте новую посылку в БД, убедитесь в отсутствии ошибки и наличии идентификатора
-	id, err := store.Add(parcel)
-	require.Equal(t, err, nil)
+	id, err := store.Add(ctx, parcel)
+	require.Nil(t, err)
 	require.NotEqual(t, id, 0)
 	// set address
 	// обновите адрес, убедитесь в отсутствии ошибки
 	newAddress := "new test address"
-	err = store.SetAddress(id, newAddress)
-	assert.Equal(t, err, nil)
+	err = store.SetAddress(ctx, id, newAddress)
+	assert.Nil(t, err)
 
 	// check
 	// получите добавленную посылку и убедитесь, что адрес обновился
-	changedParcel, err := store.Get(id)
-	assert.Equal(t, err, nil)
+	changedParcel, err := store.Get(ctx, id)
+	assert.Nil(t, err)
 	assert.Equal(t, changedParcel.Address, newAddress)
 }
 
@@ -110,19 +113,20 @@ func TestSetStatus(t *testing.T) {
 	defer db.Close()
 	store := NewParcelStore(db)
 	parcel := getTestParcel()
+	ctx := context.Background()
 	// add
 	// добавьте новую посылку в БД, убедитесь в отсутствии ошибки и наличии идентификатора
-	id, err := store.Add(parcel)
-	require.Equal(t, err, nil)
+	id, err := store.Add(ctx, parcel)
+	require.Nil(t, err)
 	require.NotEqual(t, id, 0)
 	// set status
 	// обновите статус, убедитесь в отсутствии ошибки
-	err = store.SetStatus(id, ParcelStatusDelivered)
-	assert.Equal(t, err, nil)
+	err = store.SetStatus(ctx, id, ParcelStatusDelivered)
+	assert.Nil(t, err)
 	// check
 	// получите добавленную посылку и убедитесь, что статус обновился
-	changedParcel, err := store.Get(id)
-	assert.Equal(t, err, nil)
+	changedParcel, err := store.Get(ctx, id)
+	assert.Nil(t, err)
 	assert.Equal(t, changedParcel.Status, ParcelStatusDelivered)
 }
 
@@ -135,6 +139,7 @@ func TestGetByClient(t *testing.T) {
 	}
 	defer db.Close()
 	store := NewParcelStore(db)
+	ctx := context.Background()
 
 	parcels := []Parcel{
 		getTestParcel(),
@@ -151,8 +156,8 @@ func TestGetByClient(t *testing.T) {
 
 	// add
 	for i := 0; i < len(parcels); i++ {
-		id, err := store.Add(parcels[i]) // добавьте новую посылку в БД, убедитесь в отсутствии ошибки и наличии идентификатора
-		assert.Equal(t, err, nil)
+		id, err := store.Add(ctx, parcels[i]) // добавьте новую посылку в БД, убедитесь в отсутствии ошибки и наличии идентификатора
+		assert.Nil(t, err)
 		// обновляем идентификатор добавленной у посылки
 		parcels[i].Number = id
 
@@ -161,10 +166,10 @@ func TestGetByClient(t *testing.T) {
 	}
 
 	// get by client
-	storedParcels, err := store.GetByClient(client) // получите список посылок по идентификатору клиента, сохранённого в переменной client
+	storedParcels, err := store.GetByClient(ctx, client) // получите список посылок по идентификатору клиента, сохранённого в переменной client
 	// убедитесь в отсутствии ошибки
 	// убедитесь, что количество полученных посылок совпадает с количеством добавленных
-	assert.Equal(t, err, nil)
+	assert.Nil(t, err)
 	assert.Equal(t, len(storedParcels), len(parcels))
 
 	// check

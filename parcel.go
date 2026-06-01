@@ -4,8 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
-	"time"
 )
 
 type ParcelStore struct {
@@ -16,13 +14,12 @@ func NewParcelStore(db *sql.DB) ParcelStore {
 	return ParcelStore{db: db}
 }
 
-func (s ParcelStore) Add(p Parcel) (int, error) {
+const addParcelQuery = `INSERT INTO parcel(client, status, address, created_at) 
+                      VALUES(:client, :status, :address, :created_at)`
+
+func (s ParcelStore) Add(ctx context.Context, p Parcel) (int, error) {
 	// реализуйте добавление строки в таблицу parcel, используйте данные из переменной p
-
-	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	res, err := s.db.ExecContext(ctxWithTimeout, "INSERT INTO parcel(client, status, address, created_at) VALUES(:client, :status, :address, :created_at)",
+	res, err := s.db.ExecContext(ctx, addParcelQuery,
 		sql.Named("client", p.Client),
 		sql.Named("status", p.Status),
 		sql.Named("address", p.Address),
@@ -39,14 +36,13 @@ func (s ParcelStore) Add(p Parcel) (int, error) {
 	return int(id), nil
 }
 
-func (s ParcelStore) Get(number int) (Parcel, error) {
+const getParcelQuery = `SELECT number, client, status, address, created_at 
+                      FROM parcel WHERE number = :number`
+
+func (s ParcelStore) Get(ctx context.Context, number int) (Parcel, error) {
 	// реализуйте чтение строки по заданному number
 	// здесь из таблицы должна вернуться только одна строка
-
-	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	row := s.db.QueryRowContext(ctxWithTimeout, "SELECT number, client, status, address, created_at FROM parcel WHERE number = :number", sql.Named("number", number))
+	row := s.db.QueryRowContext(ctx, getParcelQuery, sql.Named("number", number))
 
 	// заполните объект Parcel данными из таблицы
 	p := Parcel{}
@@ -58,16 +54,16 @@ func (s ParcelStore) Get(number int) (Parcel, error) {
 	return p, nil
 }
 
-func (s ParcelStore) GetByClient(client int) ([]Parcel, error) {
+const getParcelsByClientQuery = `SELECT number, client, status, address, created_at
+                               FROM parcel WHERE client = :client`
+
+func (s ParcelStore) GetByClient(ctx context.Context, client int) ([]Parcel, error) {
 	// реализуйте чтение строк из таблицы parcel по заданному client
 	// здесь из таблицы может вернуться несколько строк
-	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	rows, err := s.db.QueryContext(ctxWithTimeout, "SELECT number, client, status, address, created_at FROM parcel WHERE client = :client", sql.Named("client", client))
+	rows, err := s.db.QueryContext(ctx, getParcelsByClientQuery, sql.Named("client", client))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			fmt.Printf("No rows with client = %d", client)
+			return []Parcel{}, nil
 		}
 		return nil, err
 	}
@@ -82,16 +78,22 @@ func (s ParcelStore) GetByClient(client int) ([]Parcel, error) {
 		}
 		res = append(res, p)
 	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if res == nil {
+		return []Parcel{}, nil
+	}
 
 	return res, nil
 }
 
-func (s ParcelStore) SetStatus(number int, status string) error {
-	// реализуйте обновление статуса в таблице parcel
-	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+const updateParcelStatusQuery = `UPDATE parcel SET status = :status WHERE number = :number`
 
-	_, err := s.db.ExecContext(ctxWithTimeout, "UPDATE parcel SET status = :status WHERE number = :number", sql.Named("status", status), sql.Named("number", number))
+func (s ParcelStore) SetStatus(ctx context.Context, number int, status string) error {
+	// реализуйте обновление статуса в таблице parcel
+	_, err := s.db.ExecContext(ctx, updateParcelStatusQuery, sql.Named("status", status), sql.Named("number", number))
 	if err != nil {
 		return err
 	}
@@ -99,13 +101,13 @@ func (s ParcelStore) SetStatus(number int, status string) error {
 	return nil
 }
 
-func (s ParcelStore) SetAddress(number int, address string) error {
+const updateParcelAddressQuery = `UPDATE parcel SET address = :address 
+                                WHERE number = :number AND status = :status`
+
+func (s ParcelStore) SetAddress(ctx context.Context, number int, address string) error {
 	// реализуйте обновление адреса в таблице parcel
 	// менять адрес можно только если значение статуса registered
-	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	_, err := s.db.ExecContext(ctxWithTimeout, "UPDATE parcel SET address = :address WHERE number = :number AND status = :status",
+	_, err := s.db.ExecContext(ctx, updateParcelAddressQuery,
 		sql.Named("address", address),
 		sql.Named("number", number),
 		sql.Named("status", ParcelStatusRegistered),
@@ -117,14 +119,13 @@ func (s ParcelStore) SetAddress(number int, address string) error {
 	return nil
 }
 
-func (s ParcelStore) Delete(number int) error {
+const deleteParcelQuery = `DELETE FROM parcel 
+                         WHERE number = :number AND status = :status`
+
+func (s ParcelStore) Delete(ctx context.Context, number int) error {
 	// реализуйте удаление строки из таблицы parcel
 	// удалять строку можно только если значение статуса registered
-
-	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	_, err := s.db.ExecContext(ctxWithTimeout, "DELETE FROM parcel WHERE number = :number AND status = :status", sql.Named("number", number), sql.Named("status", ParcelStatusRegistered))
+	_, err := s.db.ExecContext(ctx, deleteParcelQuery, sql.Named("number", number), sql.Named("status", ParcelStatusRegistered))
 	if err != nil {
 		return err
 	}

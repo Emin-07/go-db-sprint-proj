@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"time"
@@ -30,7 +31,7 @@ func NewParcelService(store ParcelStore) ParcelService {
 	return ParcelService{store: store}
 }
 
-func (s ParcelService) Register(client int, address string) (Parcel, error) {
+func (s ParcelService) Register(ctx context.Context, client int, address string) (Parcel, error) {
 	parcel := Parcel{
 		Client:    client,
 		Status:    ParcelStatusRegistered,
@@ -38,7 +39,7 @@ func (s ParcelService) Register(client int, address string) (Parcel, error) {
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 
-	id, err := s.store.Add(parcel)
+	id, err := s.store.Add(ctx, parcel)
 	if err != nil {
 		return parcel, err
 	}
@@ -51,8 +52,8 @@ func (s ParcelService) Register(client int, address string) (Parcel, error) {
 	return parcel, nil
 }
 
-func (s ParcelService) PrintClientParcels(client int) error {
-	parcels, err := s.store.GetByClient(client)
+func (s ParcelService) PrintClientParcels(ctx context.Context, client int) error {
+	parcels, err := s.store.GetByClient(ctx, client)
 	if err != nil {
 		return err
 	}
@@ -67,8 +68,8 @@ func (s ParcelService) PrintClientParcels(client int) error {
 	return nil
 }
 
-func (s ParcelService) NextStatus(number int) error {
-	parcel, err := s.store.Get(number)
+func (s ParcelService) NextStatus(ctx context.Context, number int) error {
+	parcel, err := s.store.Get(ctx, number)
 	if err != nil {
 		return err
 	}
@@ -85,15 +86,15 @@ func (s ParcelService) NextStatus(number int) error {
 
 	fmt.Printf("У посылки № %d новый статус: %s\n", number, nextStatus)
 
-	return s.store.SetStatus(number, nextStatus)
+	return s.store.SetStatus(ctx, number, nextStatus)
 }
 
-func (s ParcelService) ChangeAddress(number int, address string) error {
-	return s.store.SetAddress(number, address)
+func (s ParcelService) ChangeAddress(ctx context.Context, number int, address string) error {
+	return s.store.SetAddress(ctx, number, address)
 }
 
-func (s ParcelService) Delete(number int) error {
-	return s.store.Delete(number)
+func (s ParcelService) Delete(ctx context.Context, number int) error {
+	return s.store.Delete(ctx, number)
 }
 
 func main() {
@@ -103,6 +104,8 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
 	store := NewParcelStore(db) // создайте объект ParcelStore функцией NewParcelStore
 	service := NewParcelService(store)
@@ -110,7 +113,7 @@ func main() {
 	// регистрация посылки
 	client := 1
 	address := "Псков, д. Пушкина, ул. Колотушкина, д. 5"
-	p, err := service.Register(client, address)
+	p, err := service.Register(ctxWithTimeout, client, address)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -118,28 +121,28 @@ func main() {
 
 	// изменение адреса
 	newAddress := "Саратов, д. Верхние Зори, ул. Козлова, д. 25"
-	err = service.ChangeAddress(p.Number, newAddress)
+	err = service.ChangeAddress(ctxWithTimeout, p.Number, newAddress)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
 	// изменение статуса
-	err = service.NextStatus(p.Number)
+	err = service.NextStatus(ctxWithTimeout, p.Number)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
 	// вывод посылок клиента
-	err = service.PrintClientParcels(client)
+	err = service.PrintClientParcels(ctxWithTimeout, client)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
 	// попытка удаления отправленной посылки
-	err = service.Delete(p.Number)
+	err = service.Delete(ctxWithTimeout, p.Number)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -147,21 +150,21 @@ func main() {
 
 	// вывод посылок клиента
 	// предыдущая посылка не должна удалиться, т.к. её статус НЕ «зарегистрирована»
-	err = service.PrintClientParcels(client)
+	err = service.PrintClientParcels(ctxWithTimeout, client)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
 	// регистрация новой посылки
-	p, err = service.Register(client, address)
+	p, err = service.Register(ctxWithTimeout, client, address)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
 	// удаление новой посылки
-	err = service.Delete(p.Number)
+	err = service.Delete(ctxWithTimeout, p.Number)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -169,7 +172,7 @@ func main() {
 
 	// вывод посылок клиента
 	// здесь не должно быть последней посылки, т.к. она должна была успешно удалиться
-	err = service.PrintClientParcels(client)
+	err = service.PrintClientParcels(ctxWithTimeout, client)
 	if err != nil {
 		fmt.Println(err)
 		return
